@@ -7,7 +7,7 @@ const geolib = require('geolib');
 let builtInLog = console.log;
 console.log = (...args) => builtInLog(`[${new Date().toISOString()}] ${args}`);
 
-const expectedMetaPath = path.resolve(`${__dirname}/../../../../walk-routes/meta_archive`);
+const expectedMetaPath = path.resolve(`${__dirname}/../../walk-routes/meta_archive`);
 if (!fss.existsSync(expectedMetaPath)) {
 	throw new Error(`Expected directory [${expectedMetaPath}] does not exist`);
 }
