@@ -124,7 +124,7 @@ const { execSync } = require('child_process');
 		res.end();
 	});
 
-	const ssl = await devcert.certificateFor(['localhost']);
+	const ssl = await devcert.certificateFor(['localhost', 'mike-desktop.local']);
 	const server = https.createServer(ssl, app);
 	server.listen(port, () => console.log(`Listening on [${port}]`));
 
@@ -143,7 +143,7 @@ const { execSync } = require('child_process');
 			await fs.mkdir(expectedMonthPath);
 		}
 
-		const bodyWithDistance = addDistance(body);
+		const bodyWithDistance = await addDistance(body);
 
 		const expectedFilePath = path.resolve(`${expectedMonthPath}/${day}.json`);
 		if (fss.existsSync(expectedFilePath)) {
@@ -157,13 +157,19 @@ const { execSync } = require('child_process');
 		console.log(`Wrote to [${expectedFilePath}}]`);
 	}
 
-	function addDistance(body) {
+	async function addDistance(body) {
 		const copy = JSON.parse(JSON.stringify(body));
+
+		const tmpFilePath = `${process.env.TMP}/distance_json_temp.json`;
+
+		await fs.writeFile(tmpFilePath, JSON.stringify(body));
 
 		const pathToScript = path.resolve(`${__dirname}/../../walk-routes/meta_archive/Get-DateDistance.ps1`);
 
-		const distance = execSync(`${pathToScript} -StringifiedJson ${JSON.stringify(body)}`, { shell: 'pwsh' }).toString().trim();
+		const distance = execSync(`${pathToScript} -Path ${tmpFilePath}`, { shell: 'pwsh' }).toString().trim();
 		copy.distance = distance;
+
+		await fs.rm(tmpFilePath);
 
 		return copy;
 	}
