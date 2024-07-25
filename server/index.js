@@ -167,7 +167,7 @@ const { execSync } = require('child_process');
 		const pathToScript = path.resolve(`${__dirname}/../../walk-routes/meta_archive/Get-DateDistance.ps1`);
 
 		const distance = execSync(`${pathToScript} -Path ${tmpFilePath}`, { shell: 'pwsh' }).toString().trim();
-		copy.distance = distance;
+		copy.distance = JSON.parse(distance);
 
 		await fs.rm(tmpFilePath);
 
