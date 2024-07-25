@@ -227,7 +227,7 @@
         try {
           isUploading = true;
           setUploadStatus('Upload started', 3);
-          await fetch('https://mike-desktop/events', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(exportContent) });
+          await fetch('https://mike-desktop.local/events', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(exportContent) });
           setUploadStatus('Success', 3);
         } catch (e) {
           console.log(e);
