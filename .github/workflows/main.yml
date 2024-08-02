@@ -1,0 +1,83 @@
+name: Deploy to AWS
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'client/**'
+      - '.github/**'
+  workflow_dispatch:
+    inputs:
+      invalidationPaths:
+        description: 'Paths to invalidate'
+        required: false
+
+concurrency:
+  group: aws-lambda-walks
+  cancel-in-progress: true
+
+permissions:
+  id-token: write # This is required for requesting the JWT
+  contents: read  # This is required for actions/checkout
+
+jobs:
+  aws_deploy:
+    name: Deploy to AWS
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout mikeboharsik/walk-stopwatch
+      uses: actions/checkout@v3
+
+    - id: get-sha
+      run: |
+        echo ::set-output name=lambda-sha::$( curl -u "u:${{github.token}}" https://api.github.com/repos/mikeboharsik/walk-stopwatch/git/ref/heads/main | jq .object.sha | tr -d '"' )
+
+    - name: Setup Node.js environment
+      uses: actions/setup-node@v3.6.0
+      with:
+        node-version: 16.19.1
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-region: us-east-1
+        role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+
+    - name: Invoke PowerShell scripts
+      shell: pwsh
+      run: |
+        Write-Host "Building client"          
+        Push-Location ./client
+        npm install
+        npm run build
+        Pop-Location
+        Write-Host "Finished building client`n"
+
+        $serverContent = @"
+          const fs = require('fs/promises');
+
+          exports.handler = async (event) => {
+            return {
+              statusCode: 200,
+              body: await fs.readFile('./index.html', 'utf8'),
+              headers: { 'content-type': 'text/html' }
+            }
+          };
+        "@
+
+        Set-Content ./client/dist/index.js $serverContent
+
+        Get-ChildItem -Recurse ./client/dist/* | ConvertTo-Json -Depth 3 | Write-Host
+
+        Compress-Archive -Path "./client/dist/**" -DestinationPath "./client/dist/deployable.zip" -Force
+
+        aws --no-cli-pager lambda update-function-code --function-name "stopwatch" --zip-file "fileb://./client/dist/deployable.zip"
+
+        Write-Host "Invoke-Upload.ps1 completed with result [$?]`n"
+
+    - name: Publish build folder
+      uses: actions/upload-artifact@v4
+      with:
+        name: build
+        path: client/dist
+        retention-days: 1
