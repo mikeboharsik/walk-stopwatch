@@ -20,6 +20,12 @@
     state.elapsed += (new Date().getTime() - lastTimestamp);
   }
 
+  let uploadHost = localStorage.getItem('uploadHost');
+  if (!uploadHost) {
+    localStorage.setItem('uploadHost', 'https://mike-desktop.local');
+    uploadHost = 'https://mike-desktop.local';
+  }
+
   let lastMsSinceInit = 0;
 
   $: clockText = getClockText();
@@ -29,6 +35,7 @@
   $: lastUploadStatus = null;
   $: curTime = new Date().getTime();
   $: isRunning = false;
+  $: clockClickCount = 0
 
   function setUploadStatus(message, seconds) {
     const d = new Date();
@@ -227,7 +234,7 @@
         try {
           isUploading = true;
           setUploadStatus('Upload started', 3);
-          await fetch('https://mike-desktop.local/events', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(exportContent) });
+          await fetch(`${uploadHost}/events`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(exportContent) });
           setUploadStatus('Success', 3);
         } catch (e) {
           console.log(e);
@@ -351,6 +358,16 @@
     return null;
   }
 
+  function handleClockClick() {
+    clockClickCount += 1;
+    if (clockClickCount >= 5) {
+      const newUploadHost = prompt('Enter new upload host');
+      localStorage.setItem('uploadHost', newUploadHost);
+      uploadHost = newUploadHost;
+      clockClickCount = 0;
+    }
+  }
+
   function update(msSinceInit) {
     if (state.running) {
       const dt = msSinceInit - lastMsSinceInit;
@@ -374,7 +391,9 @@
 </script>
 
 <main>
-  <h1>{clockText}</h1>
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+  <h1 on:click={handleClockClick}>{clockText}</h1>
   <h1>{stopwatchText}</h1>
   {#if curTime < uploadStatusEndTime}
     <h1>{lastUploadStatus}</h1>
