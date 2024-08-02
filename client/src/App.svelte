@@ -169,7 +169,7 @@
     });
 
     return {
-      date: new Date().toISOString().slice(0, 10),
+      date: beginEvent?.toISOString().slice(0, 10),
       startMark,
       endMark,
       startTime,
