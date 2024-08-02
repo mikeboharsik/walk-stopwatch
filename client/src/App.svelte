@@ -36,6 +36,7 @@
   $: curTime = new Date().getTime();
   $: isRunning = false;
   $: clockClickCount = 0
+  $: timerClickCount = 0
 
   function setUploadStatus(message, seconds) {
     const d = new Date();
@@ -202,51 +203,74 @@
     updateStorage(true);
   }
 
-  async function handleUploadClick(fileInputChangeEvent) {
-    const reader = new FileReader();
-    const [file] = fileInputChangeEvent.target.files;
-    reader.addEventListener('load', async () => {
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(reader.result, 'text/html');
-      const coords = Array.from(doc.querySelectorAll('trkpt'))
-        .map(e => {
-          const lat = e.attributes['lat'];
-          const lon = e.attributes['lon'];
-          const ele = e.querySelector('ele');
-          const speed = e.querySelector('speed');
-          const sat = e.querySelector('sat');
-          const time = e.querySelector('time');
+  function getCoordsFromFile(file) {
+    return new Promise((res, rej) => {
+      const reader = new FileReader();
+      reader.addEventListener('load', async () => {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(reader.result, 'text/html');
+        const coords = Array.from(doc.querySelectorAll('trkpt'))
+          .map(e => {
+            const lat = e.attributes['lat'];
+            const lon = e.attributes['lon'];
+            const ele = e.querySelector('ele');
+            const speed = e.querySelector('speed');
+            const sat = e.querySelector('sat');
+            const time = e.querySelector('time');
 
-          return {
-            lat: parseFloat(lat.value),
-            lon: parseFloat(lon.value),
-            ele: parseFloat(ele.textContent),
-            speed: speed ? parseFloat(speed.textContent) : undefined,
-            sat: sat ? parseInt(sat.textContent) : undefined,
-            time: new Date(time.textContent).getTime(),
-          };
-        });
-
-      const exportContent = await getExportContent(coords);
-      if (isTestUpload) {
-        console.log(JSON.stringify(exportContent, null, '  '));
-      } else {
-        try {
-          isUploading = true;
-          setUploadStatus('Upload started', 3);
-          await fetch(`${uploadHost}/events`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(exportContent) });
-          setUploadStatus('Success', 3);
-        } catch (e) {
-          console.log(e);
-          setUploadStatus('Failure', 3);
-        } finally {
-          isUploading = false;
-          fileInputChangeEvent.target.value = null;
-        }
-      }
+            return {
+              lat: parseFloat(lat.value),
+              lon: parseFloat(lon.value),
+              ele: parseFloat(ele.textContent),
+              speed: speed ? parseFloat(speed.textContent) : undefined,
+              sat: sat ? parseInt(sat.textContent) : undefined,
+              time: new Date(time.textContent).getTime(),
+            };
+          });
+        res(coords);
+      });
+      reader.readAsText(file);
     });
+  }
 
-    reader.readAsText(file);    
+  async function handleUploadClick(fileInputChangeEvent) {
+    const [file] = fileInputChangeEvent.target.files;
+
+    const coords = await getCoordsFromFile(file);
+
+    const exportContent = await getExportContent(coords);
+    if (isTestUpload) {
+      console.log(JSON.stringify(exportContent, null, '  '));
+    } else {
+      try {
+        isUploading = true;
+        setUploadStatus('Upload started', 3);
+        await fetch(`${uploadHost}/events`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(exportContent) });
+        setUploadStatus('Success', 3);
+      } catch (e) {
+        console.log(e);
+        setUploadStatus('Failure', 3);
+      } finally {
+        isUploading = false;
+        fileInputChangeEvent.target.value = null;
+      }
+    }
+  }
+
+  async function handleDownloadClick(fileInputChangeEvent) {
+    const [file] = fileInputChangeEvent.target.files;
+
+    const coords = await getCoordsFromFile(file);
+
+    const exportContent = await getExportContent(coords);
+    
+    const blob = new Blob([JSON.stringify(exportContent)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${exportContent.date}_walk.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   function resetStorage() {
@@ -289,9 +313,7 @@
         }
       }
 
-      console.log(state.marks);
       state.marks.push(newMark);
-      console.log(state.marks);
 
       if (![EVENT_TYPE.BEGIN, EVENT_TYPE.END].includes(button.type)) {
         setTimeout(() => {
@@ -368,6 +390,14 @@
     }
   }
 
+  function handleTimerClick() {
+    timerClickCount += 1;
+    if (timerClickCount >= 5) {
+      document.querySelector('#gps_file_download').click(); 
+      timerClickCount = 0;
+    }
+  }
+
   function update(msSinceInit) {
     if (state.running) {
       const dt = msSinceInit - lastMsSinceInit;
@@ -394,7 +424,9 @@
   <!-- svelte-ignore a11y-click-events-have-key-events -->
   <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
   <h1 on:click={handleClockClick}>{clockText}</h1>
-  <h1>{stopwatchText}</h1>
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+  <h1 on:click={handleTimerClick}>{stopwatchText}</h1>
   {#if curTime < uploadStatusEndTime}
     <h1>{lastUploadStatus}</h1>
   {/if}
@@ -459,6 +491,7 @@
   </ol>
 
   <input style="display: none" type="file" id="gps_file" on:change={handleUploadClick}>
+  <input style="display: none" type="file" id="gps_file_download" on:change={handleDownloadClick}>
 </main>
 
 <style>
