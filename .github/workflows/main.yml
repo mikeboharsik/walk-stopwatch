@@ -57,10 +57,27 @@ jobs:
           const fs = require('fs/promises');
 
           exports.handler = async (event) => {
-            return {
-              statusCode: 200,
-              body: await fs.readFile('./index.html', 'utf8'),
-              headers: { 'content-type': 'text/html' }
+            try {
+              console.log(event);
+
+              switch (event.rawPath) {
+                case '':
+                case '/':
+                case '/index.html':{
+                  return {
+                    statusCode: 200,
+                    body: await fs.readFile('./index.html', 'utf8'),
+                    headers: { 'content-type': 'text/html' }
+                  };
+                }
+                default: {
+                  return {
+                    statusCode: 404
+                  };
+                }
+              }
+            } catch (e) {
+              console.error('Unhandled exception', e);
             }
           };
         "@
