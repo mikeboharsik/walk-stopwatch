@@ -187,10 +187,6 @@
     localStorage.setItem('Backup_0', JSON.stringify(state));
   }
 
-  function updateTempData() {
-    localStorage.setItem('tempData', JSON.stringify(state));
-  }
-
   function updateStorage(ignoreRunning = false) {
     localStorage.setItem('lastTimestamp', lastTimestamp);
     if (state.running || ignoreRunning) {
@@ -331,11 +327,19 @@
           target.tag = e.target.value;
           break;
         }
+        case EVENT_TYPE.PLATE:
+        case EVENT_TYPE.PLATE_MA:
+        case EVENT_TYPE.PLATE_ME:
+        case EVENT_TYPE.PLATE_NH: {
+          target.plate = e.target.value;
+          break;
+        }
         default: {
           target.name = e.target.value;
         }
       }
-      updateTempData();
+      updateStorage(true);
+      console.log('update', localStorage.getItem('state'));
     }
   }
 
@@ -356,7 +360,6 @@
         }
         default: {}
       }
-      updateTempData();
     }
   }
 
@@ -380,21 +383,39 @@
     return null;
   }
 
+  let clockTimeout = null;
   function handleClockClick() {
     clockClickCount += 1;
+
+    if (clockClickCount === 1) {
+      clockTimeout = setTimeout(() => clockClickCount = 0, 5000);
+    }
+
     if (clockClickCount >= 5) {
-      const newUploadHost = prompt('Enter new upload host');
-      localStorage.setItem('uploadHost', newUploadHost);
-      uploadHost = newUploadHost;
+      clearTimeout(clockTimeout);
       clockClickCount = 0;
+
+      const newUploadHost = prompt('Enter new upload host');
+      if (newUploadHost) {
+        localStorage.setItem('uploadHost', newUploadHost);
+        uploadHost = newUploadHost;
+      }
     }
   }
 
+  let timerTimeout = null;
   function handleTimerClick() {
     timerClickCount += 1;
+
+    if (timerClickCount === 1) {
+      timerTimeout = setTimeout(() => timerClickCount = 0, 5000);
+    }
+
     if (timerClickCount >= 5) {
-      document.querySelector('#gps_file_download').click(); 
+      clearTimeout(timerTimeout);
       timerClickCount = 0;
+
+      document.querySelector('#gps_file_download').click();
     }
   }
 
@@ -423,10 +444,10 @@
 <main>
   <!-- svelte-ignore a11y-click-events-have-key-events -->
   <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
-  <h1 on:click={handleClockClick}>{clockText}</h1>
+  <h1 style={'user-select: none'} on:click={handleClockClick}>{clockText}</h1>
   <!-- svelte-ignore a11y-click-events-have-key-events -->
   <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
-  <h1 on:click={handleTimerClick}>{stopwatchText}</h1>
+  <h1 style={'user-select: none'} on:click={handleTimerClick}>{stopwatchText}</h1>
   {#if curTime < uploadStatusEndTime}
     <h1>{lastUploadStatus}</h1>
   {/if}
