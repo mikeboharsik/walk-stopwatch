@@ -1,24 +1,18 @@
 <script>
-  let lastTimestamp = parseInt(localStorage.getItem('lastTimestamp') ?? new Date().getTime());
-
-  let isTestUpload = false;
-
-  function getInitialState() {
-    const init = localStorage.getItem('state');
-    if (init) {
-      return JSON.parse(init);
-    }
-
-    return {
-      running: false,
-      marks: [],
-      elapsed: 0
-    };
-  }
-  let state = getInitialState();
-  if (state.running) {
-    state.elapsed += (new Date().getTime() - lastTimestamp);
-  }
+  import { getClockText } from './util/getClockText';
+  import { getDisplayText } from './util/getDisplayText';
+  import { getInitialState } from './util/getInitialState';
+  import { EVENT_TYPE, markButtons } from './util/markButtons';
+  import { updateStorage } from './util/updateStorage';
+  import { handleResetClick } from './util/handleResetClick';
+  import { handleUploadClick } from './util/handleUploadClick';
+  import { handleDownloadClick } from './util/handleDownloadClick';
+  import { handleToggleClick } from './util/handleToggleClick';
+  import { getInputChangeHandler } from './util/getInputChangeHandler';
+  import { getInputBlurHandler } from './util/getInputBlurHandler';
+  import { getItemDeleteHandler } from './util/getItemDeleteHandler';
+  import { getAddMarkHandler } from './util/getAddMarkHandler';
+  import { getItemStyle } from './util/getItemStyle';
 
   let uploadHost = localStorage.getItem('uploadHost');
   if (!uploadHost) {
@@ -26,361 +20,28 @@
     uploadHost = 'https://mike-desktop.local';
   }
 
-  let lastMsSinceInit = 0;
+  let lastTimestamp = parseInt(localStorage.getItem('lastTimestamp') ?? new Date().getTime());
 
-  $: clockText = getClockText();
-  $: stopwatchText = getDisplayText(state.elapsed);
-  $: isUploading = false;
-  $: uploadStatusEndTime = 0;
-  $: lastUploadStatus = null;
-  $: curTime = new Date().getTime();
-  $: isRunning = false;
-  $: clockClickCount = 0
-  $: timerClickCount = 0
+  let state = getInitialState();
+  if (state.running) { state.elapsed += (new Date().getTime() - lastTimestamp); }
+
+  let clockText = getClockText();
+  let stopwatchText = getDisplayText(state.elapsed);
+  let isUploading = false;
+  let uploadStatusEndTime = 0;
+  let lastUploadStatus = null;
+  let curTime = new Date().getTime();
+  let isRunning = false;
+  let clockClickCount = 0;
+  let timerClickCount = 0;
+  let isTestUpload = false;
+  let lastMsSinceInit = 0;
 
   function setUploadStatus(message, seconds) {
     const d = new Date();
     d.setSeconds(d.getSeconds() + 3);
     uploadStatusEndTime = d.getTime();
     lastUploadStatus = message;
-  }
-
-  function getDisplayText(timestamp, withoutMillseconds = false) {
-    if (timestamp === undefined) {
-      return '';
-    }
-
-    const hours = (Math.floor(timestamp / (1000 * 60 * 60))).toString().padStart(2, '0');
-    const minutes = (Math.floor(timestamp / (1000 * 60)) % 60).toString().padStart(2, '0');
-    const seconds = (Math.floor(timestamp / 1000) % 60).toString().padStart(2, '0');
-    const milliseconds = (Math.floor(timestamp % 1000)).toString().padStart(3, '0');
-    
-    return withoutMillseconds ? `${hours}:${minutes}:${seconds}` : `${hours}:${minutes}:${seconds}.${milliseconds}`;
-  }
-
-  function getClockText() {
-    const d = new Date();
-
-    const hour = d.getHours().toString().padStart(2, '0');
-    const minute = d.getMinutes().toString().padStart(2, '0');
-    const second = d.getSeconds().toString().padStart(2, '0');
-    const millisecond = d.getMilliseconds().toString().padStart(3, '0');
-
-    return `${hour}:${minute}:${second}.${millisecond}`;
-  }
-
-  const EVENT_TYPE = {
-    BEGIN: 'BEGIN',
-    CROSSWALK: 'CROSSWALK',
-    END: 'END',
-    LANE_CHANGE_WITHOUT_SIGNAL: 'LANE_CHANGE_WITHOUT_SIGNAL',
-    LOOK_BAD: 'LOOK_BAD',
-    LOOK_GOOD: 'LOOK_GOOD',
-    MISC: 'MISC',
-    PARKED_ON_WRONG_SIDE: 'PARKED_ON_WRONG_SIDE',
-    PLATE: 'PLATE',
-    PLATE_MA: 'PLATE_MA',
-    PLATE_ME: 'PLATE_ME',
-    PLATE_NH: 'PLATE_NH',
-    RED_LIGHT_RUN: 'RED_LIGHT_RUN',
-    SPACE: 'SPACE',
-    SPEEDER: 'SPEEDER',
-    STOP_SIGN_RUN: 'STOP_SIGN_RUN',
-    TAG: 'TAG',
-    TURN_AREA_BLOCK: 'TURN_AREA_BLOCK',
-    TURN_WITHOUT_SIGNAL: 'TURN_WITHOUT_SIGNAL',
-  };
-
-  const markButtons = [
-    { label: 'Plate MA', type: EVENT_TYPE.PLATE_MA },
-    { label: 'Plate NH', type: EVENT_TYPE.PLATE_NH },
-    { label: 'Plate ME', type: EVENT_TYPE.PLATE_ME },
-    { label: 'Plate', type: EVENT_TYPE.PLATE },
-    { label: 'Lane change', name: 'Driver changes lane without signal', type: EVENT_TYPE.LANE_CHANGE_WITHOUT_SIGNAL },
-    { label: 'No signal turn', name: 'Driver turns without signal', type: EVENT_TYPE.TURN_WITHOUT_SIGNAL },
-    { label: 'Stop sign', name: 'Driver runs stop sign', type: EVENT_TYPE.STOP_SIGN_RUN },
-    { label: 'Red light', name: 'Driver runs red light', type: EVENT_TYPE.RED_LIGHT_RUN },
-    { label: 'Space', name: 'Driver wastes space', type: EVENT_TYPE.SPACE },
-    { label: 'Crosswalk', name: 'Driver blocks crosswalk', type: EVENT_TYPE.CROSSWALK },
-    { label: 'Wrong park', name: 'Car parked on wrong side of road', type: EVENT_TYPE.PARKED_ON_WRONG_SIDE },
-    { label: 'Speeder', name: 'Speeding driver', type: EVENT_TYPE.SPEEDER },
-    { label: 'Block turn', name: 'Driver blocks turn area', type: EVENT_TYPE.TURN_AREA_BLOCK },    
-    { label: 'Look good', name: 'Good driver looks before turning', type: EVENT_TYPE.LOOK_GOOD },
-    { label: 'Look bad', name: 'Bad driver does not look before turning', type: EVENT_TYPE.LOOK_BAD },
-    { label: 'Tag', type: EVENT_TYPE.TAG },
-    { label: 'Misc', name: '', type: EVENT_TYPE.MISC },
-  ];
-
-  async function getExportContent(coords) {
-    const copy = JSON.parse(JSON.stringify(state.marks));
-
-    const beginEvent = copy.find(m => m.type === EVENT_TYPE.BEGIN);
-    const endEvent = copy.find(m => m.type === EVENT_TYPE.END);
-
-    const startMark = getDisplayText(beginEvent?.mark);
-    const endMark = getDisplayText(endEvent?.mark);
-
-    const startTime = beginEvent?.datetime;
-    const endTime = endEvent?.datetime;
-
-    copy.forEach((m) => {
-      m.mark = getDisplayText(m.mark);
-      if (m.name) {
-        m.name = m.name.trim();
-      }
-
-      switch(m.type) {
-        case EVENT_TYPE.BEGIN:
-        case EVENT_TYPE.END:
-        case EVENT_TYPE.PLATE:
-        case EVENT_TYPE.TAG: {
-          break;
-        }
-        case EVENT_TYPE.PLATE_MA: {
-          m.plate = `MA ${m.plate}`;
-          break;
-        }
-        case EVENT_TYPE.PLATE_ME: {
-          m.plate = `ME ${m.plate}`;
-          break;
-        }
-        case EVENT_TYPE.PLATE_NH: {
-          m.plate = `NH ${m.plate}`;
-          break;
-        }
-        case EVENT_TYPE.MISC: {
-          break;
-        }
-        default: {
-          m.plate = '';
-        }
-      }
-
-      delete m.id;
-    });
-    const events = copy.filter(e => ![EVENT_TYPE.BEGIN, EVENT_TYPE.END].includes(e.type));
-
-    events.forEach(m => { 
-      delete m.type;
-
-      Object.keys(m).forEach(key => {
-        m[key] = m[key].trim();
-      });
-    });
-
-    return {
-      date: beginEvent?.datetime?.slice(0, 10),
-      startMark,
-      endMark,
-      startTime,
-      endTime,
-      events,
-      coords,
-    };
-  }
-
-  function backup() {
-    const maxBackupCount = 5;
-    for (let i = maxBackupCount - 1; i >= 0; i--) {
-      localStorage.setItem(`Backup_${i}`, localStorage.getItem(`Backup_${i-1}`));
-    }
-    localStorage.setItem('Backup_0', JSON.stringify(state));
-  }
-
-  function updateStorage(ignoreRunning = false) {
-    localStorage.setItem('lastTimestamp', lastTimestamp);
-    if (state.running || ignoreRunning) {
-      localStorage.setItem('state', JSON.stringify(state));
-    }
-  }
-
-  function handleToggleClick() {
-    state.running = !state.running;    
-    updateStorage(true);
-  }
-
-  function getCoordsFromFile(file) {
-    return new Promise((res, rej) => {
-      const reader = new FileReader();
-      reader.addEventListener('load', async () => {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(reader.result, 'text/html');
-        const coords = Array.from(doc.querySelectorAll('trkpt'))
-          .map(e => {
-            const lat = e.attributes['lat'];
-            const lon = e.attributes['lon'];
-            const ele = e.querySelector('ele');
-            const speed = e.querySelector('speed');
-            const sat = e.querySelector('sat');
-            const time = e.querySelector('time');
-
-            return {
-              lat: parseFloat(lat.value),
-              lon: parseFloat(lon.value),
-              ele: parseFloat(ele.textContent),
-              speed: speed ? parseFloat(speed.textContent) : undefined,
-              sat: sat ? parseInt(sat.textContent) : undefined,
-              time: new Date(time.textContent).getTime(),
-            };
-          });
-        res(coords);
-      });
-      reader.readAsText(file);
-    });
-  }
-
-  async function handleUploadClick(fileInputChangeEvent) {
-    const [file] = fileInputChangeEvent.target.files;
-
-    const coords = await getCoordsFromFile(file);
-
-    const exportContent = await getExportContent(coords);
-    if (isTestUpload) {
-      console.log(JSON.stringify(exportContent, null, '  '));
-    } else {
-      try {
-        isUploading = true;
-        setUploadStatus('Upload started', 3);
-        await fetch(`${uploadHost}/events`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(exportContent) });
-        setUploadStatus('Success', 3);
-      } catch (e) {
-        console.log(e);
-        setUploadStatus('Failure', 3);
-      } finally {
-        isUploading = false;
-        fileInputChangeEvent.target.value = null;
-      }
-    }
-  }
-
-  async function handleDownloadClick(fileInputChangeEvent) {
-    const [file] = fileInputChangeEvent.target.files;
-
-    const coords = await getCoordsFromFile(file);
-
-    const exportContent = await getExportContent(coords);
-    
-    const blob = new Blob([JSON.stringify(exportContent)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${exportContent.date}_walk.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function resetStorage() {
-    state.marks = [];
-    state.elapsed = 0;
-    state.running = false;
-    updateStorage(true);
-  }
-
-  function handleResetClick() {
-    backup();
-    resetStorage();
-  }
-
-  function getAddMarkHandler(button) {
-    return () => {
-      const id = crypto.randomUUID?.().toUpperCase() ?? Math.floor(Math.random() * 1e10);
-
-      const newMark = { id, mark: state.elapsed, type: button.type };
-
-      switch (button.type) {
-        case EVENT_TYPE.BEGIN: 
-        case EVENT_TYPE.END: {
-          newMark.datetime = new Date().toISOString();
-          break;
-        }
-        case EVENT_TYPE.PLATE:
-        case EVENT_TYPE.PLATE_MA:
-        case EVENT_TYPE.PLATE_ME:
-        case EVENT_TYPE.PLATE_NH: {
-          newMark.plate = '';
-          break;
-        }
-        case EVENT_TYPE.TAG: {
-          newMark.tag = '';
-          break;
-        }
-        default: {
-          newMark.name = button.name + ' ';
-        }
-      }
-
-      state.marks.push(newMark);
-
-      if (![EVENT_TYPE.BEGIN, EVENT_TYPE.END].includes(button.type)) {
-        setTimeout(() => {
-          document.querySelector(`#input_${id}`).focus();
-        }, 50);
-      }
-    }
-  }
-
-  function getInputChangeHandler(id) {
-    return (e) => {
-      const target = state.marks.find(e => e.id === id);
-      switch (target.type) {
-        case EVENT_TYPE.TAG: {
-          target.tag = e.target.value;
-          break;
-        }
-        case EVENT_TYPE.PLATE:
-        case EVENT_TYPE.PLATE_MA:
-        case EVENT_TYPE.PLATE_ME:
-        case EVENT_TYPE.PLATE_NH: {
-          target.plate = e.target.value;
-          break;
-        }
-        default: {
-          target.name = e.target.value;
-        }
-      }
-      updateStorage(true);
-      console.log('update', localStorage.getItem('state'));
-    }
-  }
-
-  function getInputBlurHandler(id) {
-    return (e) => {
-      const target = state.marks.find(e => e.id === id);
-      switch (target.type) {
-        case EVENT_TYPE.PLATE:
-        case EVENT_TYPE.PLATE_MA:
-        case EVENT_TYPE.PLATE_ME:
-        case EVENT_TYPE.PLATE_NH: {
-          const upper = e.target.value.toUpperCase();
-          if (target.plate !== upper) {
-            target.plate = upper;
-            delete target.name;
-          }
-          break;
-        }
-        default: {}
-      }
-    }
-  }
-
-  function getItemDeleteHandler(id) {
-    return () => {
-      const targetIdx = state.marks.findIndex(e => e.id === id);
-      state.marks.splice(targetIdx, 1);
-    }
-  }
-
-  function getItemStyle(mark, idx) {
-    if (idx === 0) {
-      const diff = Math.floor(state.elapsed - mark.mark);
-      if (diff >= 5000) return null;
-
-      const percent = (5000 - diff) / 5000;
-      const n = Math.floor(255 - (255 * percent));
-
-      return `color: rgb(255, ${n}, ${n})`;
-    }
-    return null;
   }
 
   let clockTimeout = null;
@@ -434,7 +95,7 @@
     curTime = new Date().getTime();
     isRunning = state.running;
 
-    updateStorage();
+    updateStorage(state, lastTimestamp);
     requestAnimationFrame(update);
   }
 
@@ -453,36 +114,37 @@
   {/if}
 
   <p>
-    <button on:click={handleToggleClick}>Toggle</button>
+    <button on:click={() => handleToggleClick(state, lastTimestamp)}>Toggle</button>
     <button on:click={e => { isTestUpload = e.ctrlKey; document.querySelector('#gps_file').click(); }} disabled={!state.marks.length || isUploading}>Upload</button>
     {#if !isRunning}
-      <button on:click={handleResetClick}>Reset</button>
+      <button on:click={() => { handleResetClick(state, lastTimestamp); state = state; }}>Reset</button>
     {/if}
   </p>
   <p>
     {#if state.marks.find(m => m.type === EVENT_TYPE.BEGIN)}
       {''}
     {:else}
-      <button on:click={getAddMarkHandler({ type: EVENT_TYPE.BEGIN })} disabled={!state.running}>START</button>
+      <button on:click={() => getAddMarkHandler({ type: EVENT_TYPE.BEGIN })(state)} disabled={!state.running}>START</button>
     {/if}
 
     {#if (!state.marks.find(m => m.type === EVENT_TYPE.BEGIN) || state.marks.find(m => m.type === EVENT_TYPE.END))}
       {''}
     {:else}
-      <button on:click={getAddMarkHandler({ type: EVENT_TYPE.END })} disabled={!state.running}>END</button>
+      <button on:click={() => getAddMarkHandler({ type: EVENT_TYPE.END })(state)} disabled={!state.running}>END</button>
     {/if}
   </p>
   <p>
     {#each markButtons as markButton}
-      <button on:click={getAddMarkHandler(markButton)} disabled={!state.running}>{markButton.label}</button>
+      <button on:click={() => getAddMarkHandler(markButton)(state)} disabled={!state.running}>{markButton.label}</button>
     {/each}
   </p>
 
   <ol reversed style={'text-align: left; font-size: 16px;'}>
     {#each state.marks.toReversed() as mark, idx}
-      {@const itemStyle = getItemStyle(mark, idx)}
+      {@const itemStyle = getItemStyle(state, mark, idx)}
       {@const inputChangeHandler = getInputChangeHandler(mark.id)}
       {@const inputBlurHandler = getInputBlurHandler(mark.id)}
+      {@const itemDeleteHandler = getItemDeleteHandler(mark.id)}
       <li style={itemStyle}>
         {getDisplayText(mark.mark)}
         -
@@ -491,30 +153,37 @@
         {:else if mark.type === EVENT_TYPE.END}
           END
         {:else if mark.type === EVENT_TYPE.PLATE}
-          PLATE <input type="text" style={'width: 122px'} id={`input_${mark.id}`} value={mark.plate} on:blur={inputBlurHandler} on:input={inputChangeHandler}/>
+          PLATE <input type="text" style={'width: 122px'} id={`input_${mark.id}`} value={mark.plate} on:blur={(e) => inputBlurHandler(e, state)} on:input={(e) => inputChangeHandler(e, state, lastTimestamp)}/>
         {:else if mark.type === EVENT_TYPE.PLATE_MA}
-          MA <input type="text" style={'width: 122px'} id={`input_${mark.id}`} value={mark.plate} on:blur={inputBlurHandler} on:input={inputChangeHandler}/>
+          MA <input type="text" style={'width: 122px'} id={`input_${mark.id}`} value={mark.plate} on:blur={(e) => inputBlurHandler(e, state)} on:input={(e) => inputChangeHandler(e, state, lastTimestamp)}/>
         {:else if mark.type === EVENT_TYPE.PLATE_ME}
-          ME <input type="text" style={'width: 122px'} id={`input_${mark.id}`} value={mark.plate} on:blur={inputBlurHandler} on:input={inputChangeHandler}/>
+          ME <input type="text" style={'width: 122px'} id={`input_${mark.id}`} value={mark.plate} on:blur={(e) => inputBlurHandler(e, state)} on:input={(e) => inputChangeHandler(e, state, lastTimestamp)}/>
         {:else if mark.type === EVENT_TYPE.PLATE_NH}
-          NH <input type="text" style={'width: 122px'} id={`input_${mark.id}`} value={mark.plate} on:blur={inputBlurHandler} on:input={inputChangeHandler}/>
+          NH <input type="text" style={'width: 122px'} id={`input_${mark.id}`} value={mark.plate} on:blur={(e) => inputBlurHandler(e, state)} on:input={(e) => inputChangeHandler(e, state, lastTimestamp)}/>
         {:else if mark.type === EVENT_TYPE.TAG}
-          TAG <input type="text" style={'width: 122px'} id={`input_${mark.id}`} value={mark.tag} on:blur={inputBlurHandler} on:input={inputChangeHandler}/>
+          TAG <input type="text" style={'width: 122px'} id={`input_${mark.id}`} value={mark.tag} on:blur={(e) => inputBlurHandler(e, state)} on:input={(e) => inputChangeHandler(e, state, lastTimestamp)}/>
         {:else}
-          <input type="text" id={`input_${mark.id}`} value={mark.name} on:blur={inputBlurHandler} on:input={inputChangeHandler}/>
+          <input type="text" id={`input_${mark.id}`} value={mark.name} on:blur={(e) => inputBlurHandler(e, state)} on:input={(e) => inputChangeHandler(e, state, lastTimestamp)}/>
         {/if}
 
         {#if itemStyle}
-          <button style={'vertical-align: middle; margin: 0; padding: 0; height: 28px; width: 32px'} on:click={getItemDeleteHandler(mark.id)}>X</button>
+          <button style={'vertical-align: middle; margin: 0; padding: 0; height: 28px; width: 32px'} on:click={() => itemDeleteHandler(state)}>X</button>
         {/if}
       </li>
     {/each}
   </ol>
 
-  <input style="display: none" type="file" id="gps_file" on:change={handleUploadClick}>
-  <input style="display: none" type="file" id="gps_file_download" on:change={handleDownloadClick}>
+  <input style="display: none" type="file" id="gps_file" on:change={(e) => handleUploadClick(
+    e,
+    state,
+    uploadHost,
+    () => { isUploading = true; setUploadStatus('Upload started', 3) },
+    () => setUploadStatus('Success', 3),
+    () => setUploadStatus('Failure', 3),
+    () => isUploading = false,
+    isTestUpload)}>
+  <input style="display: none" type="file" id="gps_file_download" on:change={(e) => handleDownloadClick(e, state)}>
 </main>
 
 <style>
-  
 </style>
